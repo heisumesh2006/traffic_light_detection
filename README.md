@@ -1,81 +1,109 @@
-# Traffic Light Detection & Voice Assistant for Self-Driving Cars
+Traffic Light Detection & Voice Assistant for Self-Driving Cars
+Overview
 
-## Overview
-This project implements a real-time traffic light detection system for self-driving cars. It uses **YOLOv8** for object detection and **Gemini AI** as a voice assistant to provide driver alerts based on traffic signals.
+This project implements a real-time traffic light detection system for self-driving cars using YOLOv8 and a Gemini AI voice assistant.
 
 The system can:
-- Detect red, yellow, and green traffic lights in real-time using an IP webcam.
-- Send detection results to Gemini AI, which gives voice instructions like “Red light detected, please stop” or “Green light, continue driving”.
-- Assist drivers in maintaining safety and compliance with traffic rules.
 
-## Features
-- Real-time traffic light detection using YOLOv8.
-- IP webcam integration for live video input.
-- Voice-based alerts using Gemini AI.
-- Designed for self-driving car applications.
-- Easily extensible for additional features like drowsiness detection and obstacle alerts.
+Detect red, yellow, and green traffic lights in real-time using an IP webcam.
 
-## Installation
+Provide voice instructions via Gemini AI, e.g., “Red light detected, please stop”.
 
-1. Clone the repository:
+Assist drivers in maintaining safety and compliance with traffic rules.
 
-```bash
+Features
+
+Real-time traffic light detection using YOLOv8.
+
+IP webcam integration for live video input.
+
+Voice-based alerts using Gemini AI (gemini_assistant.py).
+
+Easily extensible for additional traffic rules or obstacle alerts.
+
+Installation
+Clone the repository
 git clone https://github.com/heisumesh2006/traffic_light_detection.git
-cd traffic_light_detection
+cd YOLO_REALTIME_AGENT
 
-Create a virtual environment and activate it:
-
+Setup virtual environment
 python -m venv venv
-# Windows
-venv\Scripts\activate
-# Linux/Mac
-source venv/bin/activate
+venv\Scripts\activate   # Windows
+source venv/bin/activate  # Linux/Mac
 
-
-Install dependencies:
-
+Install dependencies
 pip install -r requirements.txt
 
+Configure API keys
 
-Set up your .env file for any API keys (e.g., Gemini AI credentials).
+Add Gemini AI API credentials to .env.
 
-Setup / Usage
+Dataset Setup
+Download from Kaggle
+
+Create a Kaggle account.
+
+Download a traffic light dataset (e.g., Traffic Light Dataset
+).
+
+Use Kaggle API to download:
+
+pip install kaggle
+kaggle datasets download -d <dataset-owner>/<dataset-name>
+unzip <dataset-file>.zip -d dataset/
+
+Convert dataset to YOLO format
+python convert_json_to_yolo.py --input_dir dataset/annotations --output_dir labels/
+
 IP Webcam Setup
 
-Install an IP Webcam app on your phone (Android Play Store or iOS equivalent).
+Install an IP Webcam app on your phone:
 
-Start the camera and note the IP URL it provides (e.g., http://192.168.1.5:8080/video).
+Android: IP Webcam
 
-Update the URL in your project:
+iOS: Any IP webcam app.
 
-Open realtime_detect.py.
+Start the camera and note the IP URL (e.g., http://192.168.1.5:8080/video).
 
-Replace the default ip_url with your phone’s IP Webcam URL.
+Update realtime_detect.py:
 
-Run the project
+ip_url = "http://192.168.1.5:8080/video"
 
-Real-time traffic light detection:
-
+Running the Project
+Real-time traffic light detection
 python realtime_detect.py
 
-
-Run the main project script (if needed):
-
+Run main script (if needed)
 python main.py
 
+Observe detection
 
-The system will detect traffic lights and provide voice instructions automatically.
+The system detects traffic lights and provides voice instructions automatically.
 
-License
+Directory Structure
+YOLO_REALTIME_AGENT/
+│── dataset/                       # Dataset folder
+│── images/                        # Images for training/detection
+│── labels/                        # YOLO formatted labels
+│── runs/                          # Training/testing results
+│── templates/
+│    └── index.html                # Optional web template
+│── .env                           # API keys
+│── .gitignore
+│── app.py                         # Optional web app script
+│── best.pt                        # Pre-trained YOLOv8 weights
+│── convert_json_to_yolo.py        # Conversion script
+│── data.yaml                       # YOLOv8 dataset config
+│── gemini_assistant.py            # Gemini AI voice assistant
+│── main.py                        # Main project script
+│── realtime_detect.py             # Real-time detection script
+│── traffic_signal_final.ipynb     # Notebook for experimentation
+│── train.json                      # Dataset annotations
 
-This project is open-source and available under the MIT License
-.
+Notes
 
+Ensure your phone and computer are on the same network for IP Webcam.
 
----
+You can retrain YOLOv8 using your dataset by updating data.yaml and running:
 
-✅ This version is **organized, clean, and user-friendly** for GitHub.  
-
-If you want, I can also **add a “Demo GIF / Screenshot” section** so anyone visiting the repo sees the detection in action immediately—it makes it much more professional.  
-
-Do you want me to add that?
+!yolo train data=data.yaml model=yolov8n.pt epochs=100 imgsz=640
