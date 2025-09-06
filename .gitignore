@@ -1,0 +1,24 @@
+# Ignore image files
+*.jpg
+*.jpeg
+*.png
+
+# Ignore text files if needed
+*.txt
+
+# Ignore Python cache/env
+__pycache__/
+*.pyc
+env/
+venv/
+
+# Ignore YOLO outputs
+runs/
+outputs/
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore secrets
+.env
