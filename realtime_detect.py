@@ -20,7 +20,7 @@ model.fuse()
 print("✅ Model loaded and fused")
 
 # =====================
-# CAMERA THREAD (CRITICAL FIX)
+# CAMERA THREAD
 # =====================
 latest_camera_frame = None
 camera_lock = threading.Lock()
@@ -45,14 +45,21 @@ def camera_loop():
         with camera_lock:
             latest_camera_frame = frame
 
-        time.sleep(0.01)  # slight delay for stability
+        time.sleep(0.01)
 
 
 # =====================
-# SINGLE FRAME DETECTION (FOR FLASK)
+# 🔥 ADD THIS (STATE TRACKING)
+# =====================
+last_detected_label = None
+
+
+# =====================
+# SINGLE FRAME DETECTION
 # =====================
 def detect_single_frame():
     global latest_camera_frame
+    global last_detected_label
 
     with camera_lock:
         if latest_camera_frame is None:
@@ -64,10 +71,19 @@ def detect_single_frame():
 
     label = None
     distance = None
+    new_detection = False
 
     for box in results[0].boxes:
         cls_id = int(box.cls[0].item())
-        label = model.names[cls_id]
+        current_label = model.names[cls_id]
+
+        # 🔥 ONLY TRIGGER IF NEW OBJECT
+        if current_label != last_detected_label:
+            label = current_label
+            new_detection = True
+            last_detected_label = current_label
+        else:
+            label = None  # ignore repeated detection
 
         xmin, ymin, xmax, ymax = map(int, box.xyxy[0])
         box_width = xmax - xmin
@@ -76,7 +92,7 @@ def detect_single_frame():
         cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (0, 255, 0), 2)
         cv2.putText(
             frame,
-            f"{label} {distance}m",
+            f"{current_label} {distance}m",
             (xmin, ymin - 10),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
@@ -85,5 +101,9 @@ def detect_single_frame():
         )
 
         break  # one detection per frame
+
+    # 🔁 RESET WHEN NOTHING DETECTED
+    if label is None:
+        last_detected_label = None
 
     return frame, label, distance

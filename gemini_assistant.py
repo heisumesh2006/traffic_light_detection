@@ -22,8 +22,12 @@ def _speak_blocking(text):
     global is_speaking
     with speech_lock:
         is_speaking = True
+
+        engine.stop()  
+
         engine.say(text)
         engine.runAndWait()
+
         is_speaking = False
 
 def speak(text):
@@ -55,5 +59,24 @@ def get_gemini_response(prompt):
 
     except Exception as e:
         print("❌ Gemini error:", e)
-        speak("Sorry, I could not respond.")
-        return "Gemini failed."
+
+        error_message = str(e)
+
+        # 🔧 Smart fallback handling
+        if "503" in error_message or "UNAVAILABLE" in error_message:
+            fallback = "AI analysis temporarily unavailable due to high demand."
+            print("⚠️", fallback)
+            speak("AI analysis is temporarily unavailable. Please wait.")
+            return fallback
+
+        elif "API_KEY" in error_message or "expired" in error_message:
+            fallback = "AI service unavailable due to API key issue."
+            print("⚠️", fallback)
+            speak("API key error. Please check configuration.")
+            return fallback
+
+        else:
+            fallback = "AI analysis failed due to an unexpected error."
+            print("⚠️", fallback)
+            speak("There was an internal error.")
+            return fallback
