@@ -1,42 +1,90 @@
 from realtime_detect import detect_single_frame
 from gemini_assistant import get_gemini_response
 import time
+import threading
 
-# 🔥 STATE CONTROL
+# =====================
+# STATE CONTROL
+# =====================
 last_spoken_label = None
 last_spoken_time = 0
-COOLDOWN = 5  # seconds (adjust if needed)
+COOLDOWN = 10
+
+# =====================
+# DETECTION PERSISTENCE
+# =====================
+last_detected_label = "No traffic light detected"
+last_detected_distance = None
+last_detection_time = 0
+DETECTION_HOLD_TIME = 3  # seconds
+
+latest_response = "System ready."
 
 
+# =====================
+# ASYNC GEMINI CALL
+# =====================
+def async_gemini_call(prompt):
+    global latest_response
+    try:
+        response = get_gemini_response(prompt)
+        latest_response = response
+    except Exception as e:
+        print("⚠️ Gemini async error:", e)
+
+
+# =====================
+# MAIN ANALYSIS
+# =====================
 def analyze_auto():
-    """
-    Process exactly ONE frame and return immediately.
-    """
-
     global last_spoken_label, last_spoken_time
+    global last_detected_label, last_detected_distance, last_detection_time
+    global latest_response
 
     frame, label, distance = detect_single_frame()
     current_time = time.time()
 
-    response = None
+    if frame is None:
+        return None, last_detected_label, last_detected_distance, latest_response
 
+    # =====================
+    # 🔥 DETECTION STABILITY FIX
+    # =====================
     if label:
-        # 🔥 Only trigger if NEW or cooldown passed
+        last_detected_label = label
+        last_detected_distance = distance
+        last_detection_time = current_time
+
+    elif current_time - last_detection_time > DETECTION_HOLD_TIME:
+        # only reset after hold time
+        last_detected_label = "No traffic light detected"
+        last_detected_distance = None
+
+    # Always use stable values
+    stable_label = last_detected_label
+    stable_distance = last_detected_distance
+
+    response = latest_response
+
+    # =====================
+    # 🔥 GEMINI TRIGGER
+    # =====================
+    if label != "No traffic light detected":
+        distance_text = f"{stable_distance} meters" if stable_distance else "nearby"
+
         if (
-            label != last_spoken_label or
+            stable_label != last_spoken_label and
             (current_time - last_spoken_time > COOLDOWN)
         ):
-            prompt = f"There is a {label} signal {distance} meters ahead. What should I do?"
-            response = get_gemini_response(prompt)
+            prompt = f"There is a {stable_label} signal {distance_text} ahead. What should I do?"
 
-            last_spoken_label = label
+            threading.Thread(
+                target=async_gemini_call,
+                args=(prompt,),
+                daemon=True
+            ).start()
+
+            last_spoken_label = stable_label
             last_spoken_time = current_time
-        else:
-            # ❌ Skip repeated calls
-            response = None
-    else:
-        # 🔁 Reset when nothing detected
-        last_spoken_label = None
-        response = "No traffic light detected in the current frame."
 
-    return frame, label, distance, response
+    return frame, stable_label, stable_distance, response

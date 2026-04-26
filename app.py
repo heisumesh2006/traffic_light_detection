@@ -1,108 +1,124 @@
 from flask import Flask, render_template, Response, jsonify
-import cv2
 import threading
 import time
+import cv2
 
+from realtime_detect import camera_loop, detection_loop, detect_single_frame
 from main import analyze_auto
-from realtime_detect import camera_loop
 
 app = Flask(__name__)
 
-# ==========================
-# SHARED STATE
-# ==========================
-last_result = {
-    "frame": None,
-    "label": None,
+# =====================
+# GLOBAL STATE
+# =====================
+latest_data = {
+    "label": "No traffic light detected",
     "distance": None,
-    "response": "No traffic light detected yet."
+    "response": "Starting system..."
 }
 
-# ==========================
-# BACKGROUND YOLO LOOP
-# ==========================
-def detection_loop():
-    print("🟢 Detection loop started")
-    while True:
-        frame, label, distance, response = analyze_auto()
-
-        if frame is not None:
-            last_result["frame"] = frame
-
-        if label:
-            last_result["label"] = label
-            last_result["distance"] = distance
-            last_result["response"] = response
-
-        time.sleep(0.02)
+data_lock = threading.Lock()
 
 
-# ==========================
-# START THREADS ONCE
-# ==========================
-threads_started = False
-lock = threading.Lock()
-
-@app.before_request
+# =====================
+# START THREADS
+# =====================
 def start_threads():
-    global threads_started
-    if not threads_started:
-        with lock:
-            if not threads_started:
-                print("📷 Starting camera thread")
-                threading.Thread(target=camera_loop, daemon=True).start()
+    print("📷 Starting camera thread")
+    threading.Thread(target=camera_loop, daemon=True).start()
 
-                print("🚀 Starting detection thread")
-                threading.Thread(target=detection_loop, daemon=True).start()
+    print("🚀 Starting detection thread")
+    threading.Thread(target=detection_loop, daemon=True).start()
 
-                threads_started = True
+    print("🧠 Starting AI update thread")
+    threading.Thread(target=update_data_loop, daemon=True).start()
 
 
-# ==========================
-# ROUTES
-# ==========================
-@app.route("/")
-def index():
-    return render_template("index.html")
+# =====================
+# UPDATE LOOP (FIXED)
+# =====================
+def update_data_loop():
+    global latest_data
+
+    while True:
+        try:
+            # 🔥 1. GET STABLE DETECTION DIRECTLY
+            frame, label, distance = detect_single_frame()
+
+            # 🔥 2. GET AI RESPONSE SEPARATELY
+            _, _, _, response = analyze_auto()
+
+            with data_lock:
+                if label is not None:
+                    latest_data["label"] = label
+                    latest_data["distance"] = distance
+
+                latest_data["response"] = response
+
+            # 🔍 DEBUG (VERY IMPORTANT)
+            print("UI DATA →", latest_data["label"], latest_data["distance"])
+
+        except Exception as e:
+            print("⚠️ Update loop error:", e)
+
+        time.sleep(0.1)
 
 
-@app.route("/video_feed")
-def video_feed():
-    def generate():
-        while True:
-            frame = last_result["frame"]
+# =====================
+# VIDEO STREAM
+# =====================
+def generate():
+    print("📡 Video stream started")
+
+    while True:
+        try:
+            frame, _, _ = detect_single_frame()
 
             if frame is None:
                 time.sleep(0.05)
                 continue
 
-            ret, buffer = cv2.imencode(".jpg", frame)
+            ret, buffer = cv2.imencode('.jpg', frame)
             if not ret:
                 continue
 
-            yield (
-                b"--frame\r\n"
-                b"Content-Type: image/jpeg\r\n\r\n"
-                + buffer.tobytes()
-                + b"\r\n"
-            )
+            frame_bytes = buffer.tobytes()
 
-            time.sleep(0.03)  # ~30 FPS max
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
 
+            time.sleep(0.03)
+
+        except Exception as e:
+            print("⚠️ Stream error:", e)
+            time.sleep(0.1)
+
+
+# =====================
+# ROUTES
+# =====================
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+
+@app.route('/video_feed')
+def video_feed():
     return Response(
         generate(),
-        mimetype="multipart/x-mixed-replace; boundary=frame"
+        mimetype='multipart/x-mixed-replace; boundary=frame'
     )
 
 
-@app.route("/latest_detection")
+@app.route('/latest_detection')
 def latest_detection():
-    return jsonify({
-        "detection": last_result["label"],
-        "distance": last_result["distance"],
-        "response": last_result["response"]
-    })
+    with data_lock:
+        return jsonify(latest_data)
 
 
+# =====================
+# MAIN
+# =====================
 if __name__ == "__main__":
-    app.run(debug=True, port=5000, use_reloader=False)
+    start_threads()
+    app.run(debug=True, use_reloader=False)
